@@ -17,16 +17,17 @@
 package cn.enaium.cf4m.factory;
 
 import cn.enaium.cf4m.CF4M;
-import cn.enaium.cf4m.annotation.Autowired;
 import cn.enaium.cf4m.annotation.module.Module;
 import cn.enaium.cf4m.annotation.module.Setting;
 import cn.enaium.cf4m.annotation.module.Extend;
 import cn.enaium.cf4m.annotation.module.*;
+import cn.enaium.cf4m.configuration.NameGeneratorConfiguration;
 import cn.enaium.cf4m.container.ModuleContainer;
 import cn.enaium.cf4m.service.ModuleService;
 import cn.enaium.cf4m.provider.ModuleProvider;
 import cn.enaium.cf4m.container.SettingContainer;
 import cn.enaium.cf4m.provider.SettingProvider;
+import cn.enaium.cf4m.util.StringUtil;
 
 import java.lang.reflect.*;
 import java.util.*;
@@ -36,15 +37,12 @@ import java.util.stream.Collectors;
  * @author Enaium
  */
 @SuppressWarnings({"unchecked", "unused"})
-public final class ModuleFactory {
-
-    public final ModuleContainer moduleContainer;
+public final class ModuleFactory extends ProviderFactory<ModuleProvider> {
 
     public ModuleFactory() {
-        final HashMap<Object, ModuleProvider> modules = new HashMap<>();
         //Find Extend
         Set<Class<?>> extendClasses = new HashSet<>();
-        for (Class<?> klass : CF4M.CLASS.getAll()) {
+        for (Class<?> klass : CF4M.CLASS.getInstance().keySet()) {
             if (klass.isAnnotationPresent(Extend.class)) {
                 extendClasses.add(klass);
             }
@@ -53,7 +51,7 @@ public final class ModuleFactory {
         final Map<Object, Map<Class<?>, Object>> multipleExtend = new HashMap<>();
 
         //Add Modules
-        for (Class<?> klass : CF4M.CLASS.getAll()) {
+        for (Class<?> klass : CF4M.CLASS.getInstance().keySet()) {
             if (klass.isAnnotationPresent(Module.class)) {
                 Module module = klass.getAnnotation(Module.class);
                 Object moduleInstance = CF4M.CLASS.create(klass);
@@ -70,75 +68,70 @@ public final class ModuleFactory {
 
                 multipleExtend.put(moduleInstance, extend);
 
-                //Add Setting
-                ArrayList<SettingProvider> settingProviders = new ArrayList<>();
 
-                for (Field field : klass.getDeclaredFields()) {
-                    field.setAccessible(true);
-                    if (field.isAnnotationPresent(Setting.class)) {
-                        settingProviders.add(new SettingProvider() {
-                            @Override
-                            public String getName() {
-                                return field.getAnnotation(Setting.class).value();
-                            }
+                ProviderFactory<SettingProvider> providerFactory = new ProviderFactory<SettingProvider>() {
+                    {
+                        for (Field field : klass.getDeclaredFields()) {
+                            field.setAccessible(true);
+                            if (field.isAnnotationPresent(Setting.class)) {
 
-                            @Override
-                            public String getDescription() {
-                                return field.getAnnotation(Setting.class).description();
-                            }
+                                Setting setting = field.getAnnotation(Setting.class);
 
-                            @Override
-                            public Object getInstance() {
                                 try {
-                                    return field.get(moduleInstance);
+                                    addProvider(field.get(moduleInstance), new SettingProvider() {
+                                        @Override
+                                        public String getName() {
+
+                                            if (StringUtil.isEmpty(setting.value())) {
+                                                return CF4M.CONFIGURATION.get(NameGeneratorConfiguration.class).generate(field);
+                                            }
+
+                                            return setting.value();
+                                        }
+
+                                        @Override
+                                        public String getDescription() {
+                                            return setting.description();
+                                        }
+
+                                        @Override
+                                        public <T> T as() {
+                                            try {
+                                                return (T) field.get(moduleInstance);
+                                            } catch (IllegalAccessException e) {
+                                                e.printStackTrace();
+                                            }
+                                            return null;
+                                        }
+
+                                        @Override
+                                        public <T> T setSetting(Object value) {
+                                            try {
+                                                field.set(moduleInstance, value);
+                                            } catch (IllegalAccessException e) {
+                                                e.printStackTrace();
+                                            }
+                                            return as();
+                                        }
+
+                                        @Override
+                                        public <T> T set(Object value) {
+                                            return setSetting(value);
+                                        }
+                                    });
                                 } catch (IllegalAccessException e) {
                                     e.printStackTrace();
                                 }
-                                return null;
                             }
-
-                            @Override
-                            public <T> T as() {
-                                try {
-                                    return (T) field.get(moduleInstance);
-                                } catch (IllegalAccessException e) {
-                                    e.printStackTrace();
-                                }
-                                return null;
-                            }
-
-                            @Override
-                            public <T> T getSetting() {
-                                return (T) getInstance();
-                            }
-
-                            @Override
-                            public <T> T setSetting(Object value) {
-                                try {
-                                    field.set(moduleInstance, value);
-                                } catch (IllegalAccessException e) {
-                                    e.printStackTrace();
-                                }
-                                return (T) getInstance();
-                            }
-                        });
+                        }
                     }
-                }
+                };
+
 
                 SettingContainer settingContainer = new SettingContainer() {
                     @Override
                     public ArrayList<SettingProvider> getAll() {
-                        return settingProviders;
-                    }
-
-                    @Override
-                    public SettingProvider getByName(String name) {
-                        for (SettingProvider settingProvider : getAll()) {
-                            if (settingProvider.getName().equalsIgnoreCase(name)) {
-                                return settingProvider;
-                            }
-                        }
-                        return null;
+                        return new ArrayList<>(providerFactory.getProvider().values());
                     }
 
                     @Override
@@ -154,7 +147,7 @@ public final class ModuleFactory {
 
                 ArrayList<ModuleService> processors = CF4M.CLASS.getService(ModuleService.class);
 
-                modules.put(moduleInstance, new ModuleProvider() {
+                addProvider(moduleInstance, new ModuleProvider() {
 
                     private boolean enable;
                     private int key;
@@ -166,6 +159,11 @@ public final class ModuleFactory {
 
                     @Override
                     public String getName() {
+
+                        if (StringUtil.isEmpty(module.value())) {
+                            return CF4M.CONFIGURATION.get(NameGeneratorConfiguration.class).generate(klass);
+                        }
+
                         return module.value();
                     }
 
@@ -175,8 +173,8 @@ public final class ModuleFactory {
                     }
 
                     @Override
-                    public Object getInstance() {
-                        return moduleInstance;
+                    public boolean isEnable() {
+                        return enable;
                     }
 
                     @Override
@@ -186,7 +184,6 @@ public final class ModuleFactory {
 
                     @Override
                     public void enable() {
-                        Class<?> klass = moduleInstance.getClass();
                         Module module = klass.getAnnotation(Module.class);
 
                         enable = !enable;
@@ -204,6 +201,11 @@ public final class ModuleFactory {
                         for (Method method : klass.getDeclaredMethods()) {
                             method.setAccessible(true);
                             try {
+
+                                if (method.isAnnotationPresent(Toggle.class)) {
+                                    method.invoke(moduleInstance);
+                                }
+
                                 if (enable) {
                                     if (method.isAnnotationPresent(Enable.class)) {
                                         method.invoke(moduleInstance);
@@ -253,30 +255,20 @@ public final class ModuleFactory {
             }
         }
 
-        moduleContainer = new ModuleContainer() {
+        CF4M.MODULE = new ModuleContainer() {
             @Override
             public ArrayList<ModuleProvider> getAll() {
-                return new ArrayList<>(modules.values());
+                return new ArrayList<>(getProvider().values());
             }
 
             @Override
             public ArrayList<ModuleProvider> getAllByType(String type) {
-                return modules.values().stream().filter(moduleProvider -> moduleProvider.getType().equals(type)).collect(Collectors.toCollection(ArrayList::new));
+                return getProvider().values().stream().filter(moduleProvider -> moduleProvider.getType().equals(type)).collect(Collectors.toCollection(ArrayList::new));
             }
 
             @Override
             public ArrayList<String> getAllType() {
                 return getAll().stream().map(ModuleProvider::getType).distinct().collect(Collectors.toCollection(ArrayList::new));
-            }
-
-            @Override
-            public ModuleProvider getByName(String name) {
-                for (ModuleProvider moduleProvider : getAll()) {
-                    if (moduleProvider.getName().equalsIgnoreCase(name)) {
-                        return moduleProvider;
-                    }
-                }
-                return null;
             }
 
             @Override
@@ -290,18 +282,8 @@ public final class ModuleFactory {
             }
 
             @Override
-            public ModuleProvider getByInstance(Object instance) {
-                return modules.get(instance);
-            }
-
-            @Override
             public ModuleProvider get(Object instance) {
-                return modules.get(instance);
-            }
-
-            @Override
-            public <T> ModuleProvider getByClass(Class<T> klass) {
-                return getByInstance(CF4M.CLASS.create(klass));
+                return getProvider().get(instance);
             }
 
             @Override
@@ -318,21 +300,5 @@ public final class ModuleFactory {
                 }
             }
         };
-
-        for (Object module : modules.keySet()) {
-            Class<?> klass = module.getClass();
-            if (klass.isAnnotationPresent(Autowired.class)) {
-                for (Field field : klass.getDeclaredFields()) {
-                    field.setAccessible(true);
-                    try {
-                        if (field.getType().equals(ModuleContainer.class)) {
-                            field.set(module, moduleContainer);
-                        }
-                    } catch (IllegalAccessException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
     }
 }

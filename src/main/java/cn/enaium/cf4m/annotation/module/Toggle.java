@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package cn.enaium.cf4m.annotation.config;
+package cn.enaium.cf4m.annotation.module;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -22,24 +22,14 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Add this annotation to the class to that this class is a config
+ * Attached {@link Module}
+ * <p>
+ * Add this annotation to the method to that this class will be invoked at module enable or disable
  *
  * @author Enaium
+ * @since 1.11.0
  */
-@Target(ElementType.TYPE)
+@Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface Config {
-    /**
-     * The name is generated when it is empty
-     * <p>
-     * {@link cn.enaium.cf4m.configuration.NameGeneratorConfiguration#generate(Class)}
-     *
-     * @return config name
-     */
-    String value() default "";
-
-    /**
-     * @return config description
-     */
-    String description() default "";
+public @interface Toggle {
 }

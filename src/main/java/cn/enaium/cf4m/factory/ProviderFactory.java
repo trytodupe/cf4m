@@ -14,18 +14,24 @@
  * limitations under the License.
  */
 
-package cn.enaium.cf4m.annotation;
+package cn.enaium.cf4m.factory;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import cn.enaium.cf4m.provider.Provider;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * @author Enaium
  */
-@Target(ElementType.TYPE)
-@Retention(RetentionPolicy.RUNTIME)
-@Component
-public @interface Component {
+public class ProviderFactory<T extends Provider> {
+    private final Map<Object, T> provider = new HashMap<>();
+
+    public void addProvider(Object instance, T provider) {
+        getProvider().put(instance, provider);
+    }
+
+    public Map<Object, T> getProvider() {
+        return provider;
+    }
 }

@@ -6,10 +6,15 @@ import cn.enaium.cf4m.annotation.module.Module;
 import cn.enaium.cf4m.container.*;
 import cn.enaium.cf4m.test.component.UtilBean;
 import cn.enaium.cf4m.test.component.UtilTest;
+import cn.enaium.cf4m.test.component.ValueTest;
 import cn.enaium.cf4m.test.configuration.ConfigurationTest;
 import cn.enaium.cf4m.test.configuration.PropertiesTest;
 import cn.enaium.cf4m.test.gui.Gui;
+import cn.enaium.cf4m.test.service.ServiceTest;
+import cn.enaium.cf4m.test.service.implement.ServiceTestImplement;
 import org.junit.jupiter.api.Assertions;
+
+import java.util.List;
 
 /**
  * @author Enaium
@@ -37,6 +42,14 @@ public class ModuleAutowiredTest {
     private ConfigurationTest configurationTest;
     @Autowired
     private PropertiesTest propertiesTest;
+    @Autowired
+    private ServiceTest serviceTest;
+    @Autowired
+    private List<ServiceTest> serviceTests;
+    @Autowired
+    private ServiceTestImplement serviceTestImplement;
+    @Autowired
+    private ValueTest value;
 
     @Enable
     public void enable() {
@@ -54,5 +67,12 @@ public class ModuleAutowiredTest {
         utilBean.utilBean();
         classContainer.create(Gui.class).render();
         System.out.println(propertiesTest.name);
+        Assertions.assertNotNull(serviceTest);
+        Assertions.assertNotNull(serviceTests);
+        Assertions.assertNotNull(serviceTestImplement);
+        serviceTest.accept();
+        serviceTestImplement.accept();
+        Assertions.assertNotNull(value);
+        value.custom();
     }
 }

@@ -27,7 +27,7 @@ import cn.enaium.cf4m.struct.Pair;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Field;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
@@ -50,10 +50,8 @@ import java.util.stream.Collectors;
 @SuppressWarnings({"unchecked"})
 public final class ClassFactory {
 
-    public final ClassContainer classContainer;
-    public final ConfigurationContainer configuration;
     private final ArrayList<PluginBean<PluginInitialize>> pluginInitializes = PluginLoader.loadPlugin(PluginInitialize.class);
-    private final HashMap<Class<?>, Object> all = new HashMap<>();
+    private final Map<Class<?>, Object> all = new HashMap<>();
 
     public ClassFactory(Class<?> mainClass) {
         LinkedHashSet<String> allClassName = getAllClassName(mainClass.getClassLoader());
@@ -74,15 +72,23 @@ public final class ClassFactory {
                 if (className.startsWith(s.getValue())) {
                     try {
                         Class<?> klass = s.getKey().loadClass(className);
-                        if (klass.isAnnotationPresent(Service.class) || klass.isAnnotationPresent(Component.class)) {
+
+                        boolean component = false;
+
+                        for (Annotation typeAnnotation : klass.getAnnotations()) {
+                            if (typeAnnotation.annotationType().isAnnotationPresent(Component.class)) {
+                                component = true;
+                                break;
+                            }
+                        }
+
+                        if (component && !klass.isAnnotation()) {
                             Object instance = klass.getConstructor().newInstance();
 
-                            if (klass.isAnnotationPresent(Component.class)) {
-                                for (Method declaredMethod : klass.getDeclaredMethods()) {
-                                    declaredMethod.setAccessible(true);
-                                    if (declaredMethod.isAnnotationPresent(Bean.class)) {
-                                        all.put(declaredMethod.getReturnType(), declaredMethod.invoke(instance));
-                                    }
+                            for (Method declaredMethod : klass.getDeclaredMethods()) {
+                                declaredMethod.setAccessible(true);
+                                if (declaredMethod.isAnnotationPresent(Bean.class)) {
+                                    all.put(declaredMethod.getReturnType(), declaredMethod.invoke(instance));
                                 }
                             }
 
@@ -90,7 +96,8 @@ public final class ClassFactory {
                         } else {
                             all.put(klass, null);
                         }
-                    } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+                    } catch (ClassNotFoundException | InstantiationException | IllegalAccessException |
+                             InvocationTargetException | NoSuchMethodException e) {
                         e.printStackTrace();
                     }
                 }
@@ -99,7 +106,12 @@ public final class ClassFactory {
 
         ArrayList<ClassService> classServices = getService(ClassService.class);
 
-        classContainer = new ClassContainer() {
+        CF4M.CLASS = new ClassContainer() {
+            @Override
+            public Map<Class<?>, Object> getInstance() {
+                return all;
+            }
+
             @Override
             public ArrayList<Class<?>> getAll() {
                 return new ArrayList<>(all.keySet());
@@ -110,7 +122,6 @@ public final class ClassFactory {
                 classServices.forEach(classService -> classService.beforeCreate(klass, instance));
                 all.put(klass, instance);
                 classServices.forEach(classService -> classService.afterCreate(klass, instance));
-                autowired();
                 return (T) all.get(klass);
             }
 
@@ -126,7 +137,8 @@ public final class ClassFactory {
             public <T> T create(Class<T> klass) {
                 try {
                     return create(klass, klass.getConstructor().newInstance());
-                } catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+                } catch (InstantiationException | IllegalAccessException | InvocationTargetException |
+                         NoSuchMethodException e) {
                     e.printStackTrace();
                 }
                 return (T) all.get(klass);
@@ -137,13 +149,11 @@ public final class ClassFactory {
                 return ClassFactory.this.getService(type);
             }
         };
-
-        configuration = new ConfigurationFactory(classContainer, mainClass.getClassLoader()).configurationContainer;
     }
 
     public void after() {
         initializePlugin();
-        autowired();
+        getService(ClassService.class).forEach(ClassService::afterProcessor);
     }
 
     private void initializePlugin() {
@@ -155,35 +165,9 @@ public final class ClassFactory {
                         + " | " + it.getDescription()
                         + " | " + it.getVersion()
                         + " | " + it.getAuthor());
-                it.getInstance().initialize(() -> configuration);
+                it.getInstance().initialize(() -> CF4M.CONFIGURATION);
             });
         }
-    }
-
-    private void autowired() {
-        all.forEach((klass, instance) -> {
-
-            if (instance == null) {
-                return;
-            }
-
-            for (Field field : klass.getDeclaredFields()) {
-                field.setAccessible(true);
-                if (!klass.isAnnotationPresent(Autowired.class) && !field.isAnnotationPresent(Autowired.class)) {
-                    continue;
-                }
-
-                try {
-                    getService(AutowiredService.class).forEach(postProcessor -> postProcessor.beforePut(field, instance));
-                    if (all.get(field.getType()) != null && field.get(instance) == null) {
-                        field.set(instance, all.get(field.getType()));
-                    }
-                    getService(AutowiredService.class).forEach(autowiredService -> autowiredService.afterPut(field, instance));
-                } catch (IllegalAccessException e) {
-                    e.printStackTrace();
-                }
-            }
-        });
     }
 
     private <T> ArrayList<T> getService(Class<T> type) {

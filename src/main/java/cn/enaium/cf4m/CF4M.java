@@ -71,37 +71,25 @@ public final class CF4M {
             new Exception("CF4M already run").printStackTrace();
         } else {
             ClassFactory classFactory = new ClassFactory(mainClass);
-            final ClassContainer classContainer = classFactory.classContainer;
-            CLASS = classContainer;
-            classContainer.create(ClassContainer.class, classContainer);
-
-            final ConfigurationContainer configuration = classFactory.configuration;
-            CONFIGURATION = configuration;
-            classContainer.create(ConfigurationContainer.class, configuration);
-
-            final EventContainer eventContainer = new EventFactory().eventContainer;
-            EVENT = eventContainer;
-            classContainer.create(EventContainer.class, eventContainer);
-
-            final ModuleContainer moduleContainer = new ModuleFactory().moduleContainer;
-            MODULE = moduleContainer;
-            classContainer.create(ModuleContainer.class, moduleContainer);
-
-            final CommandContainer commandContainer = new CommandFactory().commandContainer;
-            COMMAND = commandContainer;
-            classContainer.create(CommandContainer.class, commandContainer);
-
-            final ConfigContainer configContainer = new ConfigFactory(path).configContainer;
-            CONFIG = configContainer;
-            classContainer.create(ConfigContainer.class, configContainer);
+            CLASS.create(ClassContainer.class, CLASS);
+            new ConfigurationFactory(CF4M.CLASS, mainClass.getClassLoader());
+            CLASS.create(ConfigurationContainer.class, CONFIGURATION);
+            new EventFactory();
+            CLASS.create(EventContainer.class, EVENT);
+            new ModuleFactory();
+            CLASS.create(ModuleContainer.class, MODULE);
+            new CommandFactory();
+            CLASS.create(CommandContainer.class, COMMAND);
+            new ConfigFactory(path);
+            CLASS.create(ConfigContainer.class, CONFIG);
 
             run = true;
             classFactory.after();
-            configContainer.load();
+            CONFIG.load();
             Runtime.getRuntime().addShutdownHook(new Thread("CF4M Shutdown Thread") {
                 @Override
                 public void run() {
-                    configContainer.save();
+                    CONFIG.save();
                 }
             });
         }

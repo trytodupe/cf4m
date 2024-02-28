@@ -35,52 +35,22 @@ import java.util.*;
  * @author Enaium
  */
 @SuppressWarnings("unchecked")
-public final class CommandFactory {
-
-    private final HashMap<Object, CommandProvider> commands;
-
-    public final CommandContainer commandContainer;
-
-
+public final class CommandFactory extends ProviderFactory<CommandProvider> {
     public CommandFactory() {
-        commands = new HashMap<>();
-
-        commandContainer = new CommandContainer() {
+        CF4M.COMMAND = new CommandContainer() {
             @Override
             public ArrayList<CommandProvider> getAll() {
-                return new ArrayList<>(commands.values());
-            }
-
-            @Override
-            public CommandProvider getByInstance(Object instance) {
-                return commands.get(instance);
+                return new ArrayList<>(getProvider().values());
             }
 
             @Override
             public CommandProvider get(Object instance) {
-                return commands.get(instance);
-            }
-
-            @Override
-            public <T> CommandProvider getByClass(Class<T> klass) {
-                return getByInstance(CF4M.CLASS.create(klass));
+                return getProvider().get(instance);
             }
 
             @Override
             public <T> CommandProvider get(Class<T> klass) {
-                return getByInstance(CF4M.CLASS.create(klass));
-            }
-
-            @Override
-            public CommandProvider getByKey(String key) {
-                for (CommandProvider commandProvider : getAll()) {
-                    for (String s : commandProvider.getKey()) {
-                        if (s.equalsIgnoreCase(key)) {
-                            return commandProvider;
-                        }
-                    }
-                }
-                return null;
+                return get(CF4M.CLASS.create(klass));
             }
 
             @Override
@@ -114,7 +84,7 @@ public final class CommandFactory {
 
                     if (command != null) {
                         if (!CommandFactory.this.execCommand(command, args)) {
-                            for (List<String> parameters : this.getByInstance(command).getParam()) {
+                            for (List<String> parameters : this.get(command).getParam()) {
                                 CF4M.CONFIGURATION.get(CommandConfiguration.class).message(key + " " + parameters);
                             }
                         }
@@ -128,10 +98,10 @@ public final class CommandFactory {
             }
         };
 
-        for (Class<?> klass : CF4M.CLASS.getAll()) {
+        for (Class<?> klass : CF4M.CLASS.getInstance().keySet()) {
             if (klass.isAnnotationPresent(Command.class)) {
                 final Object commandInstance = CF4M.CLASS.create(klass);
-                commands.put(commandInstance, new CommandProvider() {
+                addProvider(commandInstance, new CommandProvider() {
                     @Override
                     public String getName() {
                         return "";
@@ -140,11 +110,6 @@ public final class CommandFactory {
                     @Override
                     public String getDescription() {
                         return klass.getAnnotation(Command.class).description();
-                    }
-
-                    @Override
-                    public Object getInstance() {
-                        return commandInstance;
                     }
 
                     @Override
@@ -160,7 +125,7 @@ public final class CommandFactory {
                     @Override
                     public List<List<String>> getParam() {
                         List<List<String>> param = new ArrayList<>();
-                        for (Method method : getInstance().getClass().getDeclaredMethods()) {
+                        for (Method method : as().getClass().getDeclaredMethods()) {
                             if (method.isAnnotationPresent(Exec.class)) {
                                 List<String> parameters = new ArrayList<>();
                                 for (Parameter parameter : method.getParameters()) {
@@ -199,7 +164,7 @@ public final class CommandFactory {
                 }
 
                 List<CommandService> processors = CF4M.CLASS.getService(CommandService.class);
-                processors.forEach(commandService -> commandService.beforeExec(commands.get(command)));
+                processors.forEach(commandService -> commandService.beforeExec(getProvider().get(command)));
                 Runnable runnable = () -> {
                     try {
                         if (params.isEmpty()) {
@@ -219,7 +184,7 @@ public final class CommandFactory {
                 } else {
                     new Thread(runnable).start();
                 }
-                processors.forEach(commandService -> commandService.afterExec(commands.get(command)));
+                processors.forEach(commandService -> commandService.afterExec(getProvider().get(command)));
                 return true;
             }
         }
@@ -227,13 +192,13 @@ public final class CommandFactory {
     }
 
     private void help() {
-        for (CommandProvider commandProvider : commandContainer.getAll()) {
+        for (CommandProvider commandProvider : CF4M.COMMAND.getAll()) {
             CF4M.CONFIGURATION.get(CommandConfiguration.class).message(CF4M.CONFIGURATION.get(CommandConfiguration.class).getPrefix() + Arrays.toString(commandProvider.getKey()) + commandProvider.getDescription());
         }
     }
 
     private Object getCommand(String key) {
-        for (Map.Entry<Object, CommandProvider> entry : commands.entrySet()) {
+        for (Map.Entry<Object, CommandProvider> entry : getProvider().entrySet()) {
             for (String s : entry.getValue().getKey()) {
                 if (s.equalsIgnoreCase(key)) {
                     return entry.getKey();

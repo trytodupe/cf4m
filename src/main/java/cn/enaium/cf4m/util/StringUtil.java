@@ -14,18 +14,13 @@
  * limitations under the License.
  */
 
-package cn.enaium.cf4m.annotation;
-
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+package cn.enaium.cf4m.util;
 
 /**
  * @author Enaium
  */
-@Target(ElementType.TYPE)
-@Retention(RetentionPolicy.RUNTIME)
-@Component
-public @interface Component {
+public class StringUtil {
+    public static boolean isEmpty(String string) {
+        return string.replace(" ", "").isEmpty();
+    }
 }

@@ -16,6 +16,7 @@
 
 package cn.enaium.cf4m.factory;
 
+import cn.enaium.cf4m.CF4M;
 import cn.enaium.cf4m.annotation.configuration.Configuration;
 import cn.enaium.cf4m.annotation.configuration.Key;
 import cn.enaium.cf4m.container.ClassContainer;
@@ -32,8 +33,7 @@ import java.util.*;
 @SuppressWarnings("unchecked")
 public final class ConfigurationFactory {
 
-    public final ConfigurationContainer configurationContainer;
-    public final Properties configurationProperties = new Properties();
+    private final Properties configurationProperties = new Properties();
 
     public ConfigurationFactory(ClassContainer classContainer, ClassLoader classLoader) {
 
@@ -41,7 +41,7 @@ public final class ConfigurationFactory {
 
         final HashMap<String, Object> properties = new HashMap<>();
 
-        for (Class<?> klass : classContainer.getAll()) {
+        for (Class<?> klass : classContainer.getInstance().keySet()) {
             if (klass.isAnnotationPresent(Configuration.class)) {
                 configurations.put(klass.getAnnotation(Configuration.class).value(), classContainer.create(klass));
             }
@@ -84,13 +84,15 @@ public final class ConfigurationFactory {
             }
         }
 
-        for (Class<?> klass : classContainer.getAll()) {
+        //Configuration
+        for (Class<?> klass : classContainer.getInstance().keySet()) {
             if (klass.getSuperclass() != null && klass.getSuperclass().isAnnotationPresent(Configuration.class)) {
                 Configuration annotation = klass.getSuperclass().getAnnotation(Configuration.class);
                 configurations.put(annotation.value(), classContainer.put(klass.getSuperclass(), classContainer.create(klass)));
             }
         }
 
+        //Properties
         for (Map.Entry<String, Object> stringObjectEntry : properties.entrySet()) {
             Properties propertiesProperties = new Properties();
             InputStream propertiesInputStream = classLoader.getResourceAsStream(stringObjectEntry.getKey());
@@ -118,25 +120,20 @@ public final class ConfigurationFactory {
             }
         }
 
-        configurationContainer = new ConfigurationContainer() {
-            @Override
-            public <T> T getByKey(String key) {
-                return (T) configurations.get(key);
-            }
-
+        CF4M.CONFIGURATION = new ConfigurationContainer() {
             @Override
             public <T> T get(String key) {
                 return (T) configurations.get(key);
             }
 
             @Override
-            public <T> T getByClass(Class<T> klass) {
+            public <T> T get(Class<T> klass) {
                 return classContainer.create(klass);
             }
 
             @Override
-            public <T> T get(Class<T> klass) {
-                return classContainer.create(klass);
+            public Properties getProperties() {
+                return configurationProperties;
             }
         };
     }

@@ -16,17 +16,15 @@
 
 package cn.enaium.cf4m.container;
 
+import java.util.Properties;
+
 /**
  * @author Enaium
  */
 public interface ConfigurationContainer {
-    @Deprecated
-    <T> T getByKey(String key);
-
     <T> T get(String key);
 
-    @Deprecated
-    <T> T getByClass(Class<T> klass);
-
     <T> T get(Class<T> klass);
+
+    Properties getProperties();
 }

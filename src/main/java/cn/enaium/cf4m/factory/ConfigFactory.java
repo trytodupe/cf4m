@@ -21,45 +21,44 @@ import cn.enaium.cf4m.annotation.config.Config;
 import cn.enaium.cf4m.annotation.config.Load;
 import cn.enaium.cf4m.annotation.config.Save;
 import cn.enaium.cf4m.configuration.ConfigConfiguration;
+import cn.enaium.cf4m.configuration.NameGeneratorConfiguration;
 import cn.enaium.cf4m.container.ConfigContainer;
 import cn.enaium.cf4m.service.ConfigService;
 import cn.enaium.cf4m.provider.ConfigProvider;
+import cn.enaium.cf4m.util.StringUtil;
 
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.HashMap;
 
 /**
  * @author Enaium
  */
 @SuppressWarnings("unchecked")
-public final class ConfigFactory {
-
-    public final ConfigContainer configContainer;
+public final class ConfigFactory extends ProviderFactory<ConfigProvider> {
 
     public ConfigFactory(String path) {
-        final HashMap<Object, ConfigProvider> configs = new HashMap<>();
         ArrayList<ConfigService> processors = CF4M.CLASS.getService(ConfigService.class);
-        for (Class<?> klass : CF4M.CLASS.getAll()) {
+        for (Class<?> klass : CF4M.CLASS.getInstance().keySet()) {
             if (klass.isAnnotationPresent(Config.class)) {
                 final Object configInstance = CF4M.CLASS.create(klass);
-                configs.put(configInstance, new ConfigProvider() {
+                addProvider(configInstance, new ConfigProvider() {
                     @Override
                     public String getName() {
-                        return klass.getAnnotation(Config.class).value();
+                        String value = klass.getAnnotation(Config.class).value();
+
+                        if (StringUtil.isEmpty(value)) {
+                            return CF4M.CONFIGURATION.get(NameGeneratorConfiguration.class).generate(klass);
+                        }
+
+                        return value;
                     }
 
                     @Override
                     public String getDescription() {
                         return klass.getAnnotation(Config.class).description();
-                    }
-
-                    @Override
-                    public Object getInstance() {
-                        return configInstance;
                     }
 
                     @Override
@@ -75,20 +74,10 @@ public final class ConfigFactory {
             }
         }
 
-        configContainer = new ConfigContainer() {
+        CF4M.CONFIG = new ConfigContainer() {
             @Override
             public ArrayList<ConfigProvider> getAll() {
-                return new ArrayList<>(configs.values());
-            }
-
-            @Override
-            public ConfigProvider getByName(String name) {
-                for (ConfigProvider configProvider : getAll()) {
-                    if (configProvider.getName().equalsIgnoreCase(name)) {
-                        return configProvider;
-                    }
-                }
-                return null;
+                return new ArrayList<>(getProvider().values());
             }
 
             @Override
@@ -102,18 +91,8 @@ public final class ConfigFactory {
             }
 
             @Override
-            public ConfigProvider getByInstance(Object instance) {
-                return configs.get(instance);
-            }
-
-            @Override
             public ConfigProvider get(Object instance) {
-                return configs.get(instance);
-            }
-
-            @Override
-            public <T> ConfigProvider getByClass(Class<T> klass) {
-                return getByInstance(CF4M.CLASS.create(klass));
+                return getProvider().get(instance);
             }
 
             @Override
@@ -124,15 +103,15 @@ public final class ConfigFactory {
             @Override
             public void load() {
                 if (CF4M.CONFIGURATION.get(ConfigConfiguration.class).getEnable()) {
-                    configs.keySet().forEach(config -> {
+                    getProvider().keySet().forEach(config -> {
                         for (Method method : config.getClass().getDeclaredMethods()) {
                             method.setAccessible(true);
                             if (method.isAnnotationPresent(Load.class)) {
                                 try {
-                                    if (new File(getByInstance(config).getPath()).exists()) {
-                                        processors.forEach(configService -> configService.beforeLoad(getByInstance(config)));
+                                    if (new File(get(config).getPath()).exists()) {
+                                        processors.forEach(configService -> configService.beforeLoad(get(config)));
                                         method.invoke(config);
-                                        processors.forEach(configService -> configService.afterLoad(getByInstance(config)));
+                                        processors.forEach(configService -> configService.afterLoad(get(config)));
                                     }
                                 } catch (IllegalAccessException | InvocationTargetException e) {
                                     e.printStackTrace();
@@ -149,16 +128,16 @@ public final class ConfigFactory {
                 if (CF4M.CONFIGURATION.get(ConfigConfiguration.class).getEnable()) {
                     new File(path).mkdir();
                     new File(path, "configs").mkdir();
-                    configs.keySet().forEach(config -> {
+                    getProvider().keySet().forEach(config -> {
                         for (Method method : config.getClass().getDeclaredMethods()) {
                             method.setAccessible(true);
                             if (method.isAnnotationPresent(Save.class)) {
                                 try {
-                                    new File(getByInstance(config).getPath()).createNewFile();
-                                    if (new File(getByInstance(config).getPath()).exists()) {
-                                        processors.forEach(configService -> configService.beforeSave(getByInstance(config)));
+                                    new File(get(config).getPath()).createNewFile();
+                                    if (new File(get(config).getPath()).exists()) {
+                                        processors.forEach(configService -> configService.beforeSave(get(config)));
                                         method.invoke(config);
-                                        processors.forEach(configService -> configService.afterSave(getByInstance(config)));
+                                        processors.forEach(configService -> configService.afterSave(get(config)));
                                     }
                                 } catch (IllegalAccessException | InvocationTargetException | IOException e) {
                                     e.printStackTrace();
